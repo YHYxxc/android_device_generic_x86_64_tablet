@@ -21,11 +21,14 @@ PRODUCT_PACKAGES += \
     drmserver \
     gps.default \
     gps.huawei \
+    io_switch \
     rtk_hciattach \
     scp \
     sftp \
     ssh \
-    sshd
+    sshd \
+    tablet-mode \
+    wacom-input \
 
 PRODUCT_PACKAGES += \
     libwpa_client \
@@ -56,7 +59,7 @@ PRODUCT_PACKAGES += \
     libnativeloader-headers \
     libandroidemu
 
-PRODUCT_HOST_PACKAGES, += \
+PRODUCT_HOST_PACKAGES += \
     libnativebridge \
     libnativeloader
 
@@ -90,6 +93,10 @@ PRODUCT_PACKAGES += usb.ids pci.ids
 # wireless-regdb
 PRODUCT_PACKAGES += regulatory.db regulatory.db.p7s
 
+## Enable hidden features on Android
+PRODUCT_PACKAGES += \
+	pc.xml \
+	hpe.xml
 
 # Some additional CLI programs
 PRODUCT_PACKAGES += tput dialog alsa-info.sh tree lspci dmidecode vainfo evtest efibootmgr
@@ -110,7 +117,7 @@ PRODUCT_PACKAGES += \
     x86_dhcpclient.recovery
 
 # A collection of scripts at scripts/
-PRODUCT_PACKAGES += blisspath boot-mode-selection.sh
+PRODUCT_PACKAGES += blisspath boot-mode-selection.sh recovery.bms.sh
 
 ## ATV
 PRODUCT_PACKAGES += \
