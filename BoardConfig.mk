@@ -30,7 +30,7 @@ include vendor/intel/proprietary/houdini/board/native_bridge_arm_on_x86.mk
 endif
 
 ifeq ($(ANDROID_USE_NDK_TRANSLATION),true)
-include vendor/google/proprietary/ndk_translation-prebuilt/board/native_bridge_arm_on_x86.mk
+-include vendor/google/proprietary/ndk_translation-prebuilt/board/native_bridge_arm_on_x86.mk
 endif
 
 TARGET_CPU_ABI_LIST_64_BIT := $(TARGET_CPU_ABI) $(NATIVE_BRIDGE_ABI_LIST_64_BIT)
