@@ -30,7 +30,10 @@ include vendor/intel/proprietary/houdini/board/native_bridge_arm_on_x86.mk
 endif
 
 ifeq ($(ANDROID_USE_NDK_TRANSLATION),true)
-include vendor/google/proprietary/ndk_translation-prebuilt/board/native_bridge_arm_on_x86.mk
+TARGET_NATIVE_BRIDGE_ABI := arm64-v8a
+TARGET_NATIVE_BRIDGE_ARCH := arm64
+TARGET_NATIVE_BRIDGE_ARCH_VARIANT := armv8-a
+TARGET_NATIVE_BRIDGE_CPU_VARIANT := generic
 endif
 
 TARGET_CPU_ABI_LIST_64_BIT := $(TARGET_CPU_ABI) $(NATIVE_BRIDGE_ABI_LIST_64_BIT)
