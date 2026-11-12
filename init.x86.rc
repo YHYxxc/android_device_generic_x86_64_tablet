@@ -1,6 +1,11 @@
 import /vendor/etc/init/hw/init.low_performance.rc
 
 on early-init
+    # Android 17 reads aconfig flags only from /metadata/aconfig, which aconfigd fills
+    # at early-init. There is no metadata partition, so back it with a tmpfs first.
+    mount tmpfs tmpfs /metadata nosuid nodev noexec mode=0755
+    restorecon /metadata
+
     write /proc/sys/kernel/ctrl-alt-del 1
 
     write /sys/module/xt_qtaguid/parameters/ctrl_write_limited N

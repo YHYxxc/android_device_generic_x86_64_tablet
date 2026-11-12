@@ -50,6 +50,9 @@ TARGET_BOARD_PLATFORM := android-x86
 USE_SQUASHFS := 0
 USE_EROFS := 1
 
+# Creates the root /metadata mount point; init.x86.rc mounts a tmpfs there.
+BOARD_USES_METADATA_PARTITION := true
+
 # A/B
 AB_OTA_UPDATER := true
 
