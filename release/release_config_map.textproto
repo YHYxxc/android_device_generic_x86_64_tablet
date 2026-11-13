@@ -1,0 +1,10 @@
+# Bass: aconfig flags that can be switched at runtime (device_config / aflags, BlissTweaks,
+# BlissConfigOverrides' device_config.conf), so one image serves many use cases.
+# build/make/core/release_config.mk loads device/*/*/release maps after build/release and
+# before vendor/*/release and PRODUCT_RELEASE_CONFIG_MAPS, so values set by Lineage or by
+# addons still win over aconfig/cp2a here.
+description: "Bass: READ_WRITE aconfig flags (runtime switchable)"
+default_containers: "product"
+default_containers: "system"
+default_containers: "system_ext"
+default_containers: "vendor"
