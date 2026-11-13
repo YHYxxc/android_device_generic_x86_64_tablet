@@ -5,6 +5,8 @@
   device/generic/x86_64_tablet/scripts/aconfig_inventory.py diff <old.csv> <new.csv> [--namespaces a,b] [-o diff.md]
   device/generic/x86_64_tablet/scripts/aconfig_inventory.py rw-pack <flags.csv> <release> <out-dir>
                              (--namespaces a,b | --namespaces-file conf) [--prefix bass-rw]
+  device/generic/x86_64_tablet/scripts/aconfig_inventory.py caches <aosp-root> <release> <out-dir>
+                             (--namespaces a,b | --namespaces-file conf) [--maps-file f] [--map m]
 
 scan reads every *.aconfig declaration (out/ and .repo/ skipped) and resolves each flag's
 value for <release> (cp2a, bp4a, ...) by walking the release's `inherits` chain through the
@@ -22,6 +24,15 @@ is_fixed_read_only. Flags another map sets (Lineage, addons) are left to that ma
 map sets need no entry: RELEASE_ACONFIG_FLAG_DEFAULT_PERMISSION covers them. The output is
 an Android.bp (one aconfig_values per package plus an aconfig_value_set named
 aconfig_value_set-<prefix>-<release>) and <package>/<prefix>_flag_values.textproto files.
+
+caches writes one aconfig cache (<package>.pb, the parsed_flags format of aconfig_flags.pb)
+per package with flags in the given namespaces, using the host aconfig tool the way the
+build does: the release's aconfig_value_sets in order (each map's release_configs/, the
+modules they name in its Android.bp files), its RELEASE_ACONFIG_FLAG_DEFAULT_PERMISSION and
+RELEASE_ACONFIG_REQUIRE_ALL_READ_ONLY. Product maps (PRODUCT_RELEASE_CONFIG_MAPS) come from
+--maps-file (out/soong/release-config/maps_list-<product>.txt) or --map, after the
+build/release, device/*/release and vendor/*/release maps. Use it to see the flags a build
+will ship without building it (BlissTweaks' refresh_bliss_tweaks_aconfig.sh --from-source).
 """
 import argparse
 import csv
@@ -29,6 +40,7 @@ import glob
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 SKIP_DIRS = {"out", ".repo", ".git"}
@@ -267,6 +279,134 @@ def cmd_rw_pack(args):
     print(f"{total} flags in {len(picked)} packages -> {out}", file=sys.stderr)
 
 
+def bp_list(body, key):
+    m = re.search(r"\b%s:\s*\[(.*?)\]" % key, body, re.S)
+    return re.findall(r'"([^"]+)"', m.group(1)) if m else []
+
+
+def index_value_modules(map_dirs):
+    """name -> ("set", [module names]) or ("values", package, [src files]), from Android.bp."""
+    modules = {}
+    for d in map_dirs:
+        for bp in sorted(walk_files(d, "Android.bp", False)):
+            text = re.sub(r"//[^\n]*", "", open(bp, errors="ignore").read())
+            here = os.path.dirname(bp)
+            for body in blocks(text, "aconfig_values"):
+                srcs = []
+                for pattern in bp_list(body, "srcs"):
+                    srcs += sorted(glob.glob(os.path.join(here, pattern)))
+                modules[field(body, "name")] = ("values", field(body, "package"), srcs)
+            for body in blocks(text, "aconfig_value_set"):
+                names = list(bp_list(body, "values"))
+                for pattern in bp_list(body, "srcs"):
+                    for sub in sorted(glob.glob(os.path.join(here, pattern))):
+                        sub_text = re.sub(r"//[^\n]*", "", open(sub, errors="ignore").read())
+                        names += [field(b, "name") for b in blocks(sub_text, "aconfig_values")]
+                modules[field(body, "name")] = ("set", names)
+    return modules
+
+
+def release_value_sets(map_dirs, chain):
+    sets = []
+    for rel in chain:
+        for d in map_dirs:
+            path = os.path.join(d, "release_configs", rel + ".textproto")
+            if os.path.isfile(path):
+                text = strip_comments(open(path, errors="ignore").read())
+                sets += [s for s in re.findall(r'\baconfig_value_sets:\s*"([^"]+)"', text)
+                         if s not in sets]
+    return sets
+
+
+def release_flag(map_dirs, chain, name, default):
+    value = default
+    for rel in chain:
+        for d in map_dirs:
+            path = os.path.join(d, "flag_values", rel, name + ".textproto")
+            if os.path.isfile(path):
+                m = re.search(r"(bool_value|string_value):\s*(\"([^\"]*)\"|\w+)",
+                              strip_comments(open(path).read()))
+                if m:
+                    value = m.group(3) if m.group(3) is not None else m.group(2)
+    return value
+
+
+def find_aconfig(root):
+    for rel in ("out/host/linux-x86/bin/aconfig", "prebuilts/build-tools/linux-x86/bin/aconfig"):
+        path = os.path.join(root, rel)
+        if os.access(path, os.X_OK):
+            return path
+    return shutil.which("aconfig")
+
+
+def cmd_caches(args):
+    root = os.path.abspath(args.root)
+    spaces = read_namespaces(args)
+    map_dirs = [os.path.normpath(d) for d in release_roots(root, args.exclude_root or ())]
+    extra = list(args.map or [])
+    if args.maps_file and os.path.isfile(args.maps_file):
+        extra += open(args.maps_file).read().split()
+    for m in extra:
+        d = os.path.normpath(os.path.join(root, os.path.dirname(m)))
+        if d not in map_dirs:
+            map_dirs.append(d)
+    chain = release_chain(args.release, read_inherits(map_dirs))
+    if args.release not in read_inherits(map_dirs):
+        sys.exit(f"caches: no release config named {args.release}")
+    permission = release_flag(map_dirs, chain, "RELEASE_ACONFIG_FLAG_DEFAULT_PERMISSION",
+                              "READ_WRITE").lower()
+    read_only = release_flag(map_dirs, chain, "RELEASE_ACONFIG_REQUIRE_ALL_READ_ONLY", "false")
+    modules = index_value_modules(map_dirs)
+
+    values = {}
+    for set_name in release_value_sets(map_dirs, chain):
+        entry = modules.get(set_name)
+        if not entry:
+            print(f"caches: value set {set_name} not found; skipped", file=sys.stderr)
+            continue
+        for name in entry[1]:
+            mod = modules.get(name)
+            if mod and mod[0] == "values":
+                values.setdefault(mod[1], []).extend(mod[2])
+
+    flags = read_declarations(root)
+    decls, containers = {}, {}
+    for (package, _), r in flags.items():
+        decls.setdefault(package, set()).add(os.path.join(root, r["file"]))
+        containers[package] = r["container"] or "system"
+    packages = sorted({p for (p, _), r in flags.items() if r["namespace"] in spaces})
+
+    aconfig = args.aconfig or find_aconfig(root)
+    if not aconfig:
+        sys.exit("caches: host aconfig tool not found")
+    out = os.path.abspath(args.out_dir)
+    os.makedirs(out, exist_ok=True)
+    for old in glob.glob(os.path.join(out, "*.pb")):
+        os.remove(old)
+    written = 0
+    for package in packages:
+        files = sorted(decls[package])
+        attempts = [files, [f for f in files if "/test" not in f.lower()]]
+        for decl_files in attempts:
+            cmd = [aconfig, "create-cache", "--package", package,
+                   "--container", containers[package],
+                   "--cache", os.path.join(out, package + ".pb"),
+                   "--default-permission", permission,
+                   "--allow-read-write", "false" if read_only in ("true", "1") else "true"]
+            for f in decl_files:
+                cmd += ["--declarations", f]
+            for v in values.get(package, []):
+                cmd += ["--values", v]
+            p = subprocess.run(cmd, capture_output=True, text=True)
+            if p.returncode == 0:
+                written += 1
+                break
+        else:
+            print(f"caches: {package}: {p.stderr.strip()[:200]}", file=sys.stderr)
+    print(f"{written}/{len(packages)} package caches -> {out} (release {args.release}, "
+          f"default permission {permission}, {len(map_dirs)} release maps)", file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -288,8 +428,19 @@ def main():
     p.add_argument("--namespaces-file")
     p.add_argument("--prefix", default="bass-rw")
     p.add_argument("--license", default="Android-Apache-2.0")
+    c = sub.add_parser("caches")
+    c.add_argument("root")
+    c.add_argument("release")
+    c.add_argument("out_dir")
+    c.add_argument("--namespaces")
+    c.add_argument("--namespaces-file")
+    c.add_argument("--maps-file")
+    c.add_argument("--map", action="append")
+    c.add_argument("--exclude-root", action="append")
+    c.add_argument("--aconfig")
     args = ap.parse_args()
-    {"scan": cmd_scan, "diff": cmd_diff, "rw-pack": cmd_rw_pack}[args.cmd](args)
+    {"scan": cmd_scan, "diff": cmd_diff, "rw-pack": cmd_rw_pack,
+     "caches": cmd_caches}[args.cmd](args)
 
 
 if __name__ == "__main__":
