@@ -236,6 +236,10 @@ $(call inherit-product-if-exists, vendor/intel/proprietary/houdini/native_bridge
 PRODUCT_SYSTEM_DEFAULT_PROPERTIES += persist.sys.nativebridge=1
 endif
 
+ifeq ($(ANDROID_USE_DIGITALIS),true)
+$(call inherit-product, vendor/digitalis/prebuilts/digitalis-prebuilts.mk)
+endif
+
 $(call inherit-product,$(if $(wildcard $(PRODUCT_DIR)packages.mk),$(PRODUCT_DIR),$(LOCAL_PATH)/)packages.mk)
 
 ifeq ($(BOARD_IS_GO_BUILD),true)
@@ -284,3 +288,6 @@ PRODUCT_VENDOR_PROPERTIES += drm.service.enabled=true
 PRODUCT_REQUIRES_INSECURE_EXECMEM_FOR_SWIFTSHADER := true
 
 $(call inherit-product-if-exists, hardware/x86power/x86power.mk)
+
+PRODUCT_SYSTEM_PROPERTIES += \
+    persist.wm.debug.desktop_mode_enforce_device_restrictions=false
