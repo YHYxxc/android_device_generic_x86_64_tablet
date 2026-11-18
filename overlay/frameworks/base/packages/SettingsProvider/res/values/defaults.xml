@@ -24,4 +24,5 @@
     <bool name="def_accelerometer_rotation">true</bool>
     <!-- default setting for Settings.System.POWERMENU_ADVANCED -->
     <bool name="def_powermenu_advanced">false</bool>
+    <bool name="def_show_ime_with_hard_keyboard">true</bool>
 </resources>
