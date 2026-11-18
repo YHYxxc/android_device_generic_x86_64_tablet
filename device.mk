@@ -275,7 +275,8 @@ ifneq ($(USE_TV_BUILD), true)
 # Enable MultiWindow
 PRODUCT_PROPERTY_OVERRIDES += \
     persist.sys.debug.multi_window=true \
-    persist.sys.debug.desktop_mode=true
+    persist.sys.debug.desktop_mode=true \
+    persist.wm.debug.desktop_mode_enforce_device_restrictions=false
 endif
 
 # DRM service opt-in
