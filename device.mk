@@ -236,6 +236,10 @@ $(call inherit-product-if-exists, vendor/intel/proprietary/houdini/native_bridge
 PRODUCT_SYSTEM_DEFAULT_PROPERTIES += persist.sys.nativebridge=1
 endif
 
+ifeq ($(ANDROID_USE_DIGITALIS),true)
+$(call inherit-product, vendor/digitalis/prebuilts/digitalis-prebuilts.mk)
+endif
+
 $(call inherit-product,$(if $(wildcard $(PRODUCT_DIR)packages.mk),$(PRODUCT_DIR),$(LOCAL_PATH)/)packages.mk)
 
 ifeq ($(BOARD_IS_GO_BUILD),true)
@@ -275,7 +279,8 @@ ifneq ($(USE_TV_BUILD), true)
 # Enable MultiWindow
 PRODUCT_PROPERTY_OVERRIDES += \
     persist.sys.debug.multi_window=true \
-    persist.sys.debug.desktop_mode=true
+    persist.sys.debug.desktop_mode=true \
+    persist.wm.debug.desktop_mode_enforce_device_restrictions=false
 endif
 
 # DRM service opt-in
